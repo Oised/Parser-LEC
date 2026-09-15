@@ -15,6 +15,10 @@ from ast_nodes import (
     Stmt,
     StringLiteral,
     TypeName,
+    Assignment,
+    CallExpr,
+    CallStmt,
+    IdentifierExpr,
 )
 
 
@@ -172,19 +176,77 @@ class Parser:
         return TYPE_BY_TOKEN[token.kind]
 
     def parse_parameter_list(self) -> list[Parameter]:
-        raise NotImplementedError("implemente parameter_list")
+        parameters: list[Parameter] = [self.parse_parameter()]
+
+        while self.match(TokenKind.COMMA) is not None:
+            parameters.append(self.parse_parameter())
+
+        return parameters
 
     def parse_parameter(self) -> Parameter:
-        raise NotImplementedError("implemente parameter")
+        start = self.peek()
+        param_type = self.parse_type()
+        name = self.expect(TokenKind.IDENTIFIER)
+        return Parameter(
+            param_type,
+            name.lexeme,
+            span=self._span(start, name)
+        )
 
     def parse_block(self) -> Block:
-        raise NotImplementedError("implemente block")
+        start = self.expect(TokenKind.LEFT_BRACE)
+        statements: list[Stmt] = []
+
+        while self.peek().kind in STATEMENT_START:
+            statements.append(self.parse_statement())
+
+        end = self.expect(TokenKind.RIGHT_BRACE)
+        return Block(statements, span=self._span(start, end))
+
 
     def parse_statement(self) -> Stmt:
-        raise NotImplementedError("implemente statement")
+        kind = self.peek().kind
+        if kind in TYPE_START:
+            return self.parse_declaration()
+        if kind is TokenKind.IDENTIFIER:
+            return self.parse_id_or_call_statement()
+        if kind is TokenKind.KW_IF:
+            return self.parse_if_statement()
+        if kind is TokenKind.KW_WHILE:
+            return self.parse_while_statement()
+        if kind is TokenKind.KW_RETURN:
+            return self.parse_return_statement()
+        if kind is TokenKind.KW_PRINT:
+            return self.parse_print_statement()
+        if kind is TokenKind.LEFT_BRACE:
+            return self.parse_block()
+        
+        raise ParserError(self.peek(), STATEMENT_START)
 
     def parse_id_or_call_statement(self) -> Stmt:
-        raise NotImplementedError("implemente id_or_call_statement")
+        name_token = self.expect(TokenKind.IDENTIFIER)
+
+        next_token = self.expect({TokenKind.ASSIGN, TokenKind.LEFT_PAREN})
+        if next_token.kind is TokenKind.ASSIGN:
+            value_expr = self.parse_expression()
+            semicolon_token = self.expect(TokenKind.SEMICOLON)
+            target_expr = IdentifierExpr(name_token.lexeme, span=self._span(name_token, name_token))
+
+            return Assignment(target_expr, value_expr, span=self._span(name_token, semicolon_token))
+
+        arguments = self.parse_arguments()
+        self.expect(TokenKind.RIGHT_PAREN)
+        semicolon_token = self.expect(TokenKind.SEMICOLON)
+
+        call_expr = CallExpr(
+            name_token.lexeme,
+            arguments, 
+            span=self._span(name_token, semicolon_token)
+            )
+
+        return CallStmt(call_expr, span=self._span(name_token, semicolon_token))
+
+
 
     def parse_declaration(self) -> Stmt:
         raise NotImplementedError("implemente declaration")
